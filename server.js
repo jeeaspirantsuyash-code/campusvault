@@ -38,16 +38,26 @@ function readBody(req) {
   });
 }
 
-function serveStatic(req, res, pathname) {
-  let filePath = pathname === '/' ? '/index.html' : pathname;
-  filePath = path.join(PUBLIC_DIR, filePath);
+const ROOT_DIR = __dirname;
 
-  // prevent path traversal
-  if (!filePath.startsWith(PUBLIC_DIR)) {
-    res.writeHead(403);
-    return res.end('Forbidden');
+function resolveStaticFile(pathname) {
+  const rel = pathname === '/' ? '/index.html' : pathname;
+  const candidates = [path.join(PUBLIC_DIR, rel), path.join(ROOT_DIR, rel)];
+  for (const candidate of candidates) {
+    const safe = candidate.startsWith(PUBLIC_DIR) || candidate.startsWith(ROOT_DIR);
+    if (safe && fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
+      return candidate;
+    }
   }
+  return null;
+}
 
+function serveStatic(req, res, pathname) {
+  const filePath = resolveStaticFile(pathname);
+  if (!filePath) {
+    res.writeHead(404, { 'Content-Type': 'text/plain' });
+    return res.end('Not found');
+  }
   fs.readFile(filePath, (err, content) => {
     if (err) {
       res.writeHead(404, { 'Content-Type': 'text/plain' });
@@ -134,22 +144,18 @@ function listStudents(query) {
 }
 
 async function handleApi(req, res, pathname, query) {
-  // GET /api/dashboard
   if (req.method === 'GET' && pathname === '/api/dashboard') {
     return sendJson(res, 200, getDashboardStats());
   }
 
-  // GET /api/departments
   if (req.method === 'GET' && pathname === '/api/departments') {
     return sendJson(res, 200, DEPARTMENTS);
   }
 
-  // GET /api/students
   if (req.method === 'GET' && pathname === '/api/students') {
     return sendJson(res, 200, listStudents(query));
   }
 
-  // POST /api/students
   if (req.method === 'POST' && pathname === '/api/students') {
     const body = await readBody(req);
     const required = ['full_name', 'email', 'roll_no', 'enrollment_id', 'department', 'program', 'year', 'section', 'cgpa', 'attendance'];
@@ -172,7 +178,6 @@ async function handleApi(req, res, pathname, query) {
     }
   }
 
-  // PUT /api/students/:id
   const studentMatch = pathname.match(/^\/api\/students\/(\d+)$/);
   if (req.method === 'PUT' && studentMatch) {
     const id = Number(studentMatch[1]);
@@ -194,7 +199,6 @@ async function handleApi(req, res, pathname, query) {
     }
   }
 
-  // DELETE /api/students/:id
   if (req.method === 'DELETE' && studentMatch) {
     const id = Number(studentMatch[1]);
     const existing = db.prepare('SELECT * FROM students WHERE id = ?').get(id);
@@ -204,19 +208,16 @@ async function handleApi(req, res, pathname, query) {
     return sendJson(res, 200, { ok: true });
   }
 
-  // GET /api/audit
   if (req.method === 'GET' && pathname === '/api/audit') {
     const rows = db.prepare('SELECT * FROM audit_log ORDER BY id DESC LIMIT 50').all();
     return sendJson(res, 200, rows);
   }
 
-  // GET /api/backups
   if (req.method === 'GET' && pathname === '/api/backups') {
     const rows = db.prepare('SELECT * FROM backups ORDER BY id DESC').all();
     return sendJson(res, 200, rows);
   }
 
-  // POST /api/backups  { pin }
   if (req.method === 'POST' && pathname === '/api/backups') {
     const body = await readBody(req);
     const pinRow = db.prepare('SELECT value FROM settings WHERE key = ?').get('backup_pin');
@@ -236,7 +237,6 @@ async function handleApi(req, res, pathname, query) {
     return sendJson(res, 201, backup);
   }
 
-  // POST /api/backups/:id/restore  { pin }
   const restoreMatch = pathname.match(/^\/api\/backups\/(\d+)\/restore$/);
   if (req.method === 'POST' && restoreMatch) {
     const id = Number(restoreMatch[1]);
@@ -250,48 +250,4 @@ async function handleApi(req, res, pathname, query) {
     if (!backup) return sendJson(res, 404, { error: 'Backup not found' });
     const filePath = path.join(BACKUP_DIR, backup.filename);
     if (!fs.existsSync(filePath)) return sendJson(res, 404, { error: 'Backup file missing on disk' });
-    const payload = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-
-    db.prepare('DELETE FROM students').run();
-    const insert = db.prepare(`
-      INSERT INTO students (id, full_name, email, roll_no, enrollment_id, department, program, year, section, cgpa, attendance, status, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-    for (const s of payload.students) {
-      insert.run(s.id, s.full_name, s.email, s.roll_no, s.enrollment_id, s.department, s.program, s.year, s.section, s.cgpa, s.attendance, s.status, s.created_at);
-    }
-    logAction('BACKUP_RESTORED', { backupId: id, filename: backup.filename, studentCount: payload.students.length });
-    return sendJson(res, 200, { ok: true, restoredCount: payload.students.length });
-  }
-
-  // POST /api/security/verify-pin { pin }
-  if (req.method === 'POST' && pathname === '/api/security/verify-pin') {
-    const body = await readBody(req);
-    const pinRow = db.prepare('SELECT value FROM settings WHERE key = ?').get('backup_pin');
-    const ok = body.pin === pinRow.value;
-    logAction(ok ? 'PIN_VERIFICATION_PASSED' : 'PIN_VERIFICATION_FAILED', {});
-    return sendJson(res, ok ? 200 : 401, { ok });
-  }
-
-  return sendJson(res, 404, { error: 'Not found' });
-}
-
-const server = http.createServer(async (req, res) => {
-  const parsed = url.parse(req.url, true);
-  const pathname = parsed.pathname;
-
-  try {
-    if (pathname.startsWith('/api/')) {
-      await handleApi(req, res, pathname, parsed.query);
-    } else {
-      serveStatic(req, res, pathname);
-    }
-  } catch (err) {
-    sendJson(res, 500, { error: err.message });
-  }
-});
-
-server.listen(PORT, () => {
-  console.log(`CampusVault running at http://localhost:${PORT}`);
-  console.log(`Database file: ${DB_PATH}`);
-});
+    const payload = JSON.parse(fs.readFileSync(filePath,
