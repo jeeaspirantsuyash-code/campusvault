@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>CampusVault · St. Jude Institute Registrar</title>
+<link rel="stylesheet" href="https://raw.githubusercontent.com/jeeaspirantsuyash-code/campusvault/main/style.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark">CV</div>
+        <div class="brand-text">
+          <div class="name">CampusVault</div>
+          <div class="sub">Registrar ERP</div>
+        </div>
+      </div>
+      <div class="session-box">
+        <div class="label"><span>Academic Session</span><span class="dot-live"></span></div>
+        <div class="value">2024–2025 Regular</div>
+      </div>
+      <nav class="nav-group">
+        <div class="group-label">INSTITUTIONAL REGISTRY</div>
+        <button class="nav-link" data-page="dashboard"><span class="ic">▤</span> Dashboard</button>
+        <button class="nav-link" data-page="students"><span class="ic">☰</span> Students Directory</button>
+        <button class="nav-link" data-page="security"><span class="ic">◈</span> Security &amp; Backup</button>
+      </nav>
+      <div class="sidebar-footer">Local database active. Student records stored in a real SQLite file on this server.</div>
+    </aside>
+    <div class="main">
+      <div class="topbar">
+        <div>
+          <div class="inst-name">St. Jude Institute of Technology &amp; Sciences</div>
+          <div class="inst-sub">Affiliated to State Tech University · Est. 1964</div>
+        </div>
+        <div class="topbar-right">
+          <span class="badge green" id="db-badge">● Database Connected</span>
+          <button class="btn" id="refresh-btn">Refresh</button>
+        </div>
+      </div>
+      <div class="content" id="content"></div>
+    </div>
+  </div>
+  <div id="modal-root"></div>
+  <div id="toast" class="toast"></div>
+  <script src="https://raw.githubusercontent.com/jeeaspirantsuyash-code/campusvault/main/app.js"></script>
+</body>
+</html>
