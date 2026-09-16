@@ -1,120 +1,32 @@
 const { DatabaseSync } = require('node:sqlite');
 const path = require('node:path');
 const fs = require('node:fs');
-
+const crypto = require('node:crypto');
 const DATA_DIR = path.join(__dirname, 'data');
 const DB_PATH = path.join(DATA_DIR, 'campusvault.db');
 const BACKUP_DIR = path.join(DATA_DIR, 'backups');
-
-if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-if (!fs.existsSync(BACKUP_DIR)) fs.mkdirSync(BACKUP_DIR, { recursive: true });
-
-const isNewDb = !fs.existsSync(DB_PATH);
+if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR,{recursive:true});
+if (!fs.existsSync(BACKUP_DIR)) fs.mkdirSync(BACKUP_DIR,{recursive:true});
 const db = new DatabaseSync(DB_PATH);
-
-db.exec(`
-  CREATE TABLE IF NOT EXISTS students (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    full_name TEXT NOT NULL,
-    email TEXT NOT NULL,
-    roll_no TEXT NOT NULL UNIQUE,
-    enrollment_id TEXT NOT NULL,
-    department TEXT NOT NULL,
-    program TEXT NOT NULL,
-    year INTEGER NOT NULL,
-    section TEXT NOT NULL,
-    cgpa REAL NOT NULL,
-    attendance REAL NOT NULL,
-    status TEXT NOT NULL DEFAULT 'Active',
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
-  );
-
-  CREATE TABLE IF NOT EXISTS audit_log (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    action TEXT NOT NULL,
-    details TEXT,
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
-  );
-
-  CREATE TABLE IF NOT EXISTS backups (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    filename TEXT NOT NULL,
-    student_count INTEGER NOT NULL,
-    size_bytes INTEGER NOT NULL,
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
-  );
-
-  CREATE TABLE IF NOT EXISTS settings (
-    key TEXT PRIMARY KEY,
-    value TEXT NOT NULL
-  );
-`);
-
-// default backup PIN
-const pinRow = db.prepare('SELECT value FROM settings WHERE key = ?').get('backup_pin');
-if (!pinRow) {
-  db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)').run('backup_pin', '1234');
-}
-
-function logAction(action, details) {
-  db.prepare('INSERT INTO audit_log (action, details) VALUES (?, ?)').run(
-    action,
-    details ? JSON.stringify(details) : null
-  );
-}
-
-const DEPARTMENTS = [
-  { name: 'Computer Science & Engineering', programs: ['B.Tech - AI & ML', 'B.Tech - Full Stack', 'B.Tech - Cyber Security'] },
-  { name: 'Electronics & Communication', programs: ['B.Tech - VLSI Design', 'B.Tech - Embedded Systems'] },
-  { name: 'Business Administration', programs: ['MBA - Financial Systems', 'MBA - Marketing'] },
-  { name: 'Mechanical Engineering', programs: ['B.Tech - Mechatronics', 'B.Tech - Thermal'] },
-  { name: 'Civil Engineering', programs: ['B.Tech - Structural', 'B.Tech - Environmental'] },
-  { name: 'Data Science & AI', programs: ['B.Tech - NLP & Semantic Web', 'B.Tech - Applied Statistics'] },
-  { name: 'Biotechnology', programs: ['B.Tech - Gene Tech', 'B.Tech - Bioinformatics'] },
-];
-
-const FIRST_NAMES = ['Aarav', 'Priya', 'Rohan', 'Sofia', 'Julian', 'Tariq', 'Lin', 'Maya', 'Elena', 'Marcus', 'Ryan', 'Ananya', 'Kabir', 'Zara', 'Ishaan', 'Neha', 'Wei', 'Diego', 'Fatima', 'Arjun', 'Meera', 'Suyash', 'Kavya', 'Dev', 'Riya'];
-const LAST_NAMES = ['Sharma', 'Chandran', 'Mendoza', 'Sterling', 'Al-Mansoor', 'Chen', 'Lin-Hernandez', 'Thorne', 'Adebayo', 'Wei-Chen', 'Iyer', 'Verma', 'Okonjo', 'Ramesh', 'Nair', 'Gupta', 'Reddy', 'Singh', 'Patel', 'Bose'];
-
-function seed() {
-  const count = db.prepare('SELECT COUNT(*) AS c FROM students').get().c;
-  if (count > 0) return;
-
-  const insert = db.prepare(`
-    INSERT INTO students
-      (full_name, email, roll_no, enrollment_id, department, program, year, section, cgpa, attendance, status)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-
-  let rollCounter = 100;
-  const insertMany = db.createSession ? null : null; // not needed, loop is fine for ~180 rows
-
-  for (let i = 0; i < 180; i++) {
-    const dept = DEPARTMENTS[i % DEPARTMENTS.length];
-    const program = dept.programs[i % dept.programs.length];
-    const first = FIRST_NAMES[Math.floor(Math.random() * FIRST_NAMES.length)];
-    const last = LAST_NAMES[Math.floor(Math.random() * LAST_NAMES.length)];
-    const fullName = `${first} ${last}`;
-    const year = 1 + (i % 4);
-    const section = ['A', 'B', 'C'][i % 3];
-    const cgpa = Math.round((6 + Math.random() * 4) * 100) / 100;
-    const attendance = Math.round((55 + Math.random() * 45) * 10) / 10;
-    const status = attendance < 65 ? 'Low Attendance' : (Math.random() < 0.05 ? 'On Leave' : 'Active');
-    rollCounter += 1;
-    const rollNo = `STJ-22-${rollCounter}`;
-    const enrollmentId = `EN-2024-${dept.name.slice(0, 3).toUpperCase()}-${1000 + i}`;
-    const email = `${first.toLowerCase()}.${last.toLowerCase().replace(/[^a-z]/g, '')}${i}@stjude.edu`;
-
-    insert.run(fullName, email, rollNo, enrollmentId, dept.name, program, year, section, cgpa, attendance, status);
-  }
-
-  logAction('SEED_COMPLETE', { studentsCreated: 180 });
-}
-
+db.exec(`CREATE TABLE IF NOT EXISTS colleges(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,code TEXT UNIQUE NOT NULL,created_at TEXT NOT NULL DEFAULT(datetime('now')));
+CREATE TABLE IF NOT EXISTS users(id INTEGER PRIMARY KEY AUTOINCREMENT,college_id INTEGER NOT NULL,full_name TEXT NOT NULL,college_id_login TEXT UNIQUE NOT NULL,password_hash TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT(datetime('now')));
+CREATE TABLE IF NOT EXISTS students(id INTEGER PRIMARY KEY AUTOINCREMENT,college_id INTEGER,full_name TEXT NOT NULL,email TEXT NOT NULL,roll_no TEXT NOT NULL,enrollment_id TEXT NOT NULL,department TEXT NOT NULL,program TEXT NOT NULL,year INTEGER NOT NULL,section TEXT NOT NULL,cgpa REAL NOT NULL,attendance REAL NOT NULL,status TEXT NOT NULL DEFAULT 'Active',created_at TEXT NOT NULL DEFAULT(datetime('now')));
+CREATE TABLE IF NOT EXISTS audit_log(id INTEGER PRIMARY KEY AUTOINCREMENT,college_id INTEGER,action TEXT NOT NULL,details TEXT,created_at TEXT NOT NULL DEFAULT(datetime('now')));
+CREATE TABLE IF NOT EXISTS backups(id INTEGER PRIMARY KEY AUTOINCREMENT,filename TEXT NOT NULL,student_count INTEGER NOT NULL,size_bytes INTEGER NOT NULL,created_at TEXT NOT NULL DEFAULT(datetime('now')));
+CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY,value TEXT NOT NULL);`);
+function addColumn(table,col,type){try{db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${type}`)}catch(e){}}
+addColumn('students','college_id','INTEGER');
+addColumn('audit_log','college_id','INTEGER');
+const defaultCollege = db.prepare('SELECT * FROM colleges ORDER BY id LIMIT 1').get() || (()=>{let code='AITH-'+crypto.randomBytes(2).toString('hex').toUpperCase();let r=db.prepare('INSERT INTO colleges(name,code) VALUES(?,?)').run('Dr. Ambedkar Institute of Technology for Divyangjan, U.P., Kanpur',code);return db.prepare('SELECT * FROM colleges WHERE id=?').get(r.lastInsertRowid)})();
+db.prepare('UPDATE students SET college_id=? WHERE college_id IS NULL').run(defaultCollege.id);
+const pinRow=db.prepare('SELECT value FROM settings WHERE key=?').get('backup_pin');
+if(!pinRow) db.prepare('INSERT INTO settings(key,value) VALUES(?,?)').run('backup_pin','1234');
+const DEPARTMENTS=[{name:'Computer Science & Engineering',programs:['B.Tech - AI & ML','B.Tech - Full Stack','B.Tech - Cyber Security']},{name:'Electronics & Communication',programs:['B.Tech - VLSI Design','B.Tech - Embedded Systems']},{name:'Business Administration',programs:['MBA - Financial Systems','MBA - Marketing']},{name:'Mechanical Engineering',programs:['B.Tech - Mechatronics','B.Tech - Thermal']},{name:'Civil Engineering',programs:['B.Tech - Structural','B.Tech - Environmental']},{name:'Data Science & AI',programs:['B.Tech - NLP & Semantic Web','B.Tech - Applied Statistics']},{name:'Biotechnology',programs:['B.Tech - Gene Tech','B.Tech - Bioinformatics']}];
+function hashPassword(p){return crypto.scryptSync(String(p), 'CampusVault-'+process.env.PASSWORD_PEPPER||'CampusVault-demo', 64).toString('hex')}
+function verifyPassword(p,h){try{return crypto.timingSafeEqual(Buffer.from(hashPassword(p),'hex'),Buffer.from(h,'hex'))}catch{return false}}
+function logAction(action,details,collegeId=null){db.prepare('INSERT INTO audit_log(college_id,action,details) VALUES(?,?,?)').run(collegeId,action,details?JSON.stringify(details):null)}
+function createCollegeUser(x){if(!x.college_name||!x.full_name||!x.password)throw Error('College name, your name and password are required');if(String(x.password).length<6)throw Error('Password must be at least 6 characters');let code=(x.college_id||('CV-'+crypto.randomBytes(3).toString('hex').toUpperCase())).trim();if(db.prepare('SELECT id FROM users WHERE college_id_login=?').get(code))throw Error('College ID already exists');let c=db.prepare('INSERT INTO colleges(name,code) VALUES(?,?)').run(String(x.college_name).trim(),code),u=db.prepare('INSERT INTO users(college_id,full_name,college_id_login,password_hash) VALUES(?,?,?,?)').run(c.lastInsertRowid,String(x.full_name).trim(),code,hashPassword(x.password));logAction('COLLEGE_REGISTERED',{userId:u.lastInsertRowid},Number(c.lastInsertRowid));return{college_id:Number(c.lastInsertRowid),college_name:String(x.college_name).trim(),college_login:code,full_name:String(x.full_name).trim()}}
+function loginUser(code,password){let u=db.prepare('SELECT u.*,c.name college_name FROM users u JOIN colleges c ON c.id=u.college_id WHERE u.college_id_login=?').get(String(code||'').trim());if(!u||!verifyPassword(password,u.password_hash))throw Error('Invalid College ID or password');return{user_id:u.id,college_id:u.college_id,college_name:u.college_name,college_login:u.college_id_login,full_name:u.full_name}}
+function seed(){if(db.prepare('SELECT COUNT(*) c FROM students').get().c)return;let insert=db.prepare('INSERT INTO students(college_id,full_name,email,roll_no,enrollment_id,department,program,year,section,cgpa,attendance,status) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)');let first=['Aarav','Priya','Rohan','Sofia','Julian','Tariq','Maya','Elena','Ryan','Ananya','Kabir','Zara','Ishaan','Neha','Arjun','Meera','Kavya','Dev','Riya'],last=['Sharma','Chandran','Mendoza','Sterling','Chen','Iyer','Verma','Ramesh','Nair','Gupta','Reddy','Singh','Patel'];for(let i=0;i<180;i++){let d=DEPARTMENTS[i%DEPARTMENTS.length],f=first[i%first.length],l=last[i%last.length],a=Math.round((55+Math.random()*45)*10)/10;insert.run(defaultCollege.id,`${f} ${l}`,`${f.toLowerCase()}.${l.toLowerCase()}${i}@college.edu`,`STJ-22-${101+i}`,`EN-2024-${i+1000}`,d.name,d.programs[i%d.programs.length],1+i%4,['A','B','C'][i%3],Math.round((6+Math.random()*4)*100)/100,a,a<65?'Low Attendance':'Active')}logAction('SEED_COMPLETE',{studentsCreated:180},defaultCollege.id)}
 seed();
-
-if (isNewDb) {
-  logAction('DATABASE_INITIALIZED', { path: DB_PATH });
-}
-
-module.exports = { db, logAction, DEPARTMENTS, DB_PATH, BACKUP_DIR, DATA_DIR };
+module.exports={db,logAction,DEPARTMENTS,DB_PATH,BACKUP_DIR,DATA_DIR,hashPassword,verifyPassword,createCollegeUser,loginUser,defaultCollege};
