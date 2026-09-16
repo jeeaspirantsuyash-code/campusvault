@@ -1,0 +1,13 @@
+{
+  "name": "campusvault",
+  "version": "1.0.0",
+  "description": "CampusVault Registrar ERP - student directory, dashboard, and encrypted-style backup vault",
+  "main": "server.js",
+  "scripts": {
+    "start": "node --experimental-sqlite server.js"
+  },
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "license": "MIT"
+}
